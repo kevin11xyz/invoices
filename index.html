@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice System</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: auto;
+      background: #fff;
+      color: #000;
+    }
+    h1 {
+      text-align: center;
+      letter-spacing: 3px;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 8px 5px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .totals {
+      margin-top: 20px;
+      text-align: right;
+      font-size: 14px;
+    }
+    .action-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 30px;
+    }
+    button {
+      padding: 10px 20px;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .print-btn { background-color: #4CAF50; }
+    .done-btn { background-color: #2196F3; }
+    @media print {
+      .action-buttons { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <h1>INVOICE</h1>
+  <div class="meta">
+    <div><strong>INVOICE NO:</strong> <span id="billNumber">-</span></div>
+    <div><strong>DATE:</strong> <span id="invoiceDate">-</span></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ITEM NAME</th>
+        <th>DESCRIPTION</th>
+        <th>PRICE (RS)</th>
+        <th>QTY</th>
+        <th>DISCOUNT (RS)</th>
+        <th>TOTAL (RS)</th>
+      </tr>
+    </thead>
+    <tbody id="invoiceTableBody"></tbody>
+  </table>
+
+  <div class="totals">
+    <div><strong>SUBTOTAL:</strong> <span id="subtotal">Rs. 0.00</span></div>
+    <div>Discount: <span id="discount">Rs. 0.00</span></div>
+    <div><strong>BALANCE:</strong> <span id="balance">Rs. 0.00</span></div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="print-btn" onclick="window.print()">Print</button>
+    <button class="done-btn" id="doneBtn">Done</button>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, remove, get } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCddKRuTHpHtaQ0rLOkMOAb5q6slJ3-ybs",
+      authDomain: "project-29b6a.firebaseapp.com",
+      databaseURL: "https://project-29b6a-default-rtdb.firebaseio.com",
+      projectId: "project-29b6a",
+      storageBucket: "project-29b6a.appspot.com",
+      messagingSenderId: "731238594321",
+      appId: "1:731238594321:web:71c168ad6f35df2944feb0"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const invoicesRef = ref(db, 'invoices');
+    const historyRef = ref(db, 'History');
+    let currentBillNumber = generateBillNumber();
+
+    // Format as RS currency
+    function formatRS(amount) {
+      return 'Rs. ' + parseFloat(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    // Generate unique bill number (INV-YYYYMMDDXXXX)
+    function generateBillNumber() {
+      const now = new Date();
+      return `INV-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${Math.floor(Math.random()*9000+1000)}`;
+    }
+
+    // Load real-time data
+    onValue(invoicesRef, (snapshot) => {
+      const tbody = document.getElementById('invoiceTableBody');
+      tbody.innerHTML = '';
+      let subtotal = 0, totalDiscount = 0;
+
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        
+        // Set bill number and date
+        document.getElementById('billNumber').textContent = currentBillNumber;
+        document.getElementById('invoiceDate').textContent = new Date().toLocaleDateString();
+
+        Object.entries(data).forEach(([id, item]) => {
+          const total = (item.Price * item.Quantity) - (item.Discount || 0);
+          subtotal += item.Price * item.Quantity;
+          totalDiscount += item.Discount || 0;
+
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${item.ItemName}</td>
+            <td>${item.Description || '-'}</td>
+            <td class="text-right">${formatRS(item.Price)}</td>
+            <td class="text-right">${item.Quantity}</td>
+            <td class="text-right">${formatRS(item.Discount || 0)}</td>
+            <td class="text-right">${formatRS(total)}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      document.getElementById('subtotal').textContent = formatRS(subtotal);
+      document.getElementById('discount').textContent = formatRS(totalDiscount);
+      document.getElementById('balance').textContent = formatRS(subtotal - totalDiscount);
+    });
+
+    // Archive invoices to History
+    document.getElementById('doneBtn').addEventListener('click', async () => {
+      const snapshot = await get(invoicesRef);
+      if (!snapshot.exists()) {
+        alert('No invoices to archive!');
+        return;
+      }
+
+      try {
+        // Prepare history data
+        const historyData = {
+          billNumber: currentBillNumber,
+          date: new Date().toISOString(),
+          items: snapshot.val(),
+          subtotal: document.getElementById('subtotal').textContent,
+          discount: document.getElementById('discount').textContent,
+          total: document.getElementById('balance').textContent
+        };
+
+        // Save to History node using bill number as key
+        await set(ref(db, `History/${currentBillNumber}`), historyData);
+        
+        // Clear current invoices
+        await remove(invoicesRef);
+        
+        // Generate new bill number
+        currentBillNumber = generateBillNumber();
+        document.getElementById('billNumber').textContent = currentBillNumber;
+        
+        alert(`Invoices archived to History under ${currentBillNumber}`);
+      } catch (error) {
+        console.error('Archive error:', error);
+        alert('Error archiving invoices to History');
+      }
+    });
+  </script>
+</body>
+</html>
