@@ -155,10 +155,10 @@
           row.innerHTML = `
             <td>${item.ItemName}</td>
             <td>${item.Description || '-'}</td>
-            <td class="text-right">${formatRS(item.Price)}</td>
-            <td class="text-right">${item.Quantity}</td>
-            <td class="text-right">${formatRS(item.Discount || 0)}</td>
-            <td class="text-right">${formatRS(total)}</td>
+            <td class="">${formatRS(item.Price)}</td>
+            <td class="">${item.Quantity}</td>
+            <td class="">${formatRS(item.Discount || 0)}</td>
+            <td class="">${formatRS(total)}</td>
           `;
           tbody.appendChild(row);
         });
